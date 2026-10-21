@@ -32,4 +32,4 @@ After a PR is merged to main, a separate notification job requests a hub scan. I
 
 The register closes a finding only after a successful default-branch rescan confirms it is gone. The central hub owns the dashboard, register, scanning utilities, and skill; this repository owns the application and its tests.
 
-To repeat the demo after fixing it, revert the dependency-remediation commit and rescan. The same central issue should reopen.
+To repeat the demo after fixing it, run **Reset demo** in the central hub and merge its reset PR. It restores the pinned vulnerable manifests, source, and tests while preserving this repository?s workflows and documentation. The next scan reopens the same central issue. For a local rehearsal that leaves this checkout unchanged, use **npm run demo:reset** and **npm run demo:fix** from the hub.
