@@ -1,0 +1,52 @@
+name: Application CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+  notify-hub:
+    needs: test
+    if: always() && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && vars.HUB_REPOSITORY != ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # No application checkout or execution in this credential-bearing job.
+      - name: Validate hub configuration
+        id: hub
+        env:
+          HUB_REPOSITORY: ${{ vars.HUB_REPOSITORY }}
+        shell: bash
+        run: |
+          node -e 'const s=process.env.HUB_REPOSITORY; if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(s)) throw Error("Expected owner/repository"); const [owner,repo]=s.split("/"); require("fs").appendFileSync(process.env.GITHUB_OUTPUT,"owner="+owner+"\nrepo="+repo+"\n")'
+      - id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.NOTIFIER_APP_ID }}
+          private-key: ${{ secrets.NOTIFIER_APP_PRIVATE_KEY }}
+          owner: ${{ steps.hub.outputs.owner }}
+          repositories: ${{ steps.hub.outputs.repo }}
+          permission-actions: write
+          permission-contents: read
+      - name: Request a central rescan after a default-branch push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          HUB_REPOSITORY: ${{ vars.HUB_REPOSITORY }}
+        shell: bash
+        run: |
+          branch=$(gh api "repos/$HUB_REPOSITORY" --jq .default_branch)
+          gh api --method POST "repos/$HUB_REPOSITORY/actions/workflows/scan.yml/dispatches" -f "ref=$branch"
